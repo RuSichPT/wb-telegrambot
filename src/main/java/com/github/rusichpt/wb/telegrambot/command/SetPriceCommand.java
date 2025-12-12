@@ -1,0 +1,64 @@
+package com.github.rusichpt.wb.telegrambot.command;
+
+import com.github.rusichpt.wb.telegrambot.repository.entity.TelegramUser;
+import com.github.rusichpt.wb.telegrambot.service.SendBotService;
+import com.github.rusichpt.wb.telegrambot.service.TelegramUserService;
+import com.github.rusichpt.wb.telegrambot.wbclient.WbClientPrices;
+import com.github.rusichpt.wb.telegrambot.wbclient.dto.PriceInfoSet;
+import kong.unirest.HttpResponse;
+import kong.unirest.HttpStatus;
+import kong.unirest.JsonNode;
+import org.telegram.telegrambots.meta.api.objects.Update;
+
+import java.util.stream.Collectors;
+
+import static org.apache.commons.lang3.StringUtils.SPACE;
+import static org.apache.commons.lang3.StringUtils.isNumeric;
+
+public class SetPriceCommand extends AbstractWbCommand {
+    private final WbClientPrices wbClientPrices;
+
+    public static final String MESSAGE1 = "Чтобы поменять цену товара введите данные в виде: \n"
+            + CommandName.SET_PRICE.getCommandName()
+            + " номенклатура = цена\n\n"
+            + "Пример:\n"
+            + CommandName.SET_PRICE.getCommandName() + " 123456789 = 10256\n\n"
+            + "Текущие цены на товары: \n";
+
+    public static final String MESSAGE2 = "Цена товара %s успешно изменена на %s";
+    public static final String MESSAGE3 = "Не удалось изменить цену!";
+
+    public SetPriceCommand(SendBotService sendBotService, TelegramUserService telegramUserService, WbClientPrices wbClientPrices) {
+        super(sendBotService, telegramUserService);
+        this.wbClientPrices = wbClientPrices;
+    }
+
+    @Override
+    public void executeWbCommand(Update update) {
+        String command = update.getMessage().getText();
+        String[] comStrings = command.split(SPACE);
+        String message = MESSAGE3;
+
+        int COMMAND_LENGTH = 4;
+
+        TelegramUser user = telegramUserService.findUserByChatId(update.getMessage().getChatId()).get();
+
+        if (command.equalsIgnoreCase(CommandName.SET_PRICE.getCommandName())) {
+            message = MESSAGE1 + wbClientPrices.getPriceInfo(0, user.getWbToken()).getBody().stream()
+                    .map(p -> (String.format("%s = %s\n", p.getNmId(), p.getPrice())))
+                    .collect(Collectors.joining());
+        } else if (comStrings.length == COMMAND_LENGTH) {
+            if (comStrings[0].equalsIgnoreCase(CommandName.SET_PRICE.getCommandName())) {
+                if (comStrings[2].equalsIgnoreCase("=") && isNumeric(comStrings[3])) {
+                    PriceInfoSet price = new PriceInfoSet(Integer.parseInt(comStrings[1]), Integer.parseInt(comStrings[3]));
+                    HttpResponse<JsonNode> httpResponse = wbClientPrices.setPriceInfo(price, user.getWbToken());
+
+                    if (httpResponse.getStatus() == HttpStatus.OK) {
+                        message = String.format(MESSAGE2, price.getNmId(), price.getPrice());
+                    }
+                }
+            }
+        }
+        sendBotService.sendMessage(update.getMessage().getChatId(), message);
+    }
+}

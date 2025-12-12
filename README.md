@@ -1,4 +1,4 @@
-# WB-telegrambot
+# Wb-telegrambot
 Telegram bot for work with Wildberries
 
 ## To start it
